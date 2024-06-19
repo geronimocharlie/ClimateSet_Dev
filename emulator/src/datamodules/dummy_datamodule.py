@@ -5,6 +5,8 @@ from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
+from emulator.src.datamodules.template_datamodule import TemplateDataModule
+
 
 import torch
 
@@ -13,7 +15,7 @@ from emulator.src.utils.utils import get_logger, random_split
 log = get_logger()
 
 
-class DummyDataModule(LightningDataModule):
+class DummyDataModule(TemplateDataModule):
     """
     This is a Dummy Class for testing purposes.
     ----------------------------------------------------------------------------------------------------------
@@ -33,29 +35,30 @@ class DummyDataModule(LightningDataModule):
 
     def __init__(
         self,
-        in_var_ids: List[str] = ["BC", "CO2", "CH4", "SO2"],
-        out_var_ids: List[str] = ["pr", "tas"],
-        seq_len: int = 10,
-        seq_to_seq: bool = True,  # if true maps from T->T else from T->1
-        lon: int = 32,
-        lat: int = 32,
-        num_levels: int = 1,
-        channels_last: bool = True,  # wheather variables come last our after sequence lenght
-        batch_size: int = 16,
-        eval_batch_size: int = 64,
-        num_workers: int = 0,
-        pin_memory: bool = False,
-        load_train_into_mem: bool = False,
-        load_test_into_mem: bool = False,
-        load_valid_into_mem: bool = True,
-        verbose: bool = True,
-        seed: int = 11,
+        #in_var_ids: List[str] = ["BC", "CO2", "CH4", "SO2"],
+        #out_var_ids: List[str] = ["pr", "tas"],
+        #seq_len: int = 10,
+        #seq_to_seq: bool = True,  # if true maps from T->T else from T->1
+        #lon: int = 32,
+        #lat: int = 32,
+        #num_levels: int = 1,
+        #channels_last: bool = True,  # wheather variables come last our after sequence lenght
+        #batch_size: int = 16,
+        #eval_batch_size: int = 64,
+        #num_workers: int = 0,
+        #pin_memory: bool = False,
+        #load_train_into_mem: bool = False,
+        #load_test_into_mem: bool = False,
+        #load_valid_into_mem: bool = True,
+        #verbose: bool = True,
+        #seed: int = 11,
         size: int = 1000,
         test_split: float = 0.2,
         val_split: float = 0.2,
         # input_transform: Optional[AbstractTransform] = None,
         # normalizer: Optional[Normalizer] = None,
         test_set_names: List[str] = ["main", "second"],
+        **kwargs
     ):
         """
         Args:
@@ -88,12 +91,12 @@ class DummyDataModule(LightningDataModule):
         self._data_predict = None
         self.log_text = get_logger()
         self.test_set_names = test_set_names
-        if seq_to_seq:
-            self.out_seq_len = seq_len
+        if self.hparams.seq_to_seq:
+            self.out_seq_len = self.hparams.seq_len
         else:
             self.out_seq_len = 1
 
-        if num_levels != 1:
+        if self.hparams.num_levels != 1:
             self.log_text.warn("Multiple pressure levels not yet implemented!")
             raise NotImplementedError
 
@@ -172,54 +175,6 @@ class DummyDataModule(LightningDataModule):
         if stage == "predict":
             # just choosing at random here
             self._data_predict = val
-
-    def on_before_batch_transfer(self, batch, dataloader_idx):
-        return batch
-
-    def on_after_batch_transfer(self, batch, dataloader_idx):
-        return batch
-
-    def _shared_dataloader_kwargs(self) -> dict:
-        shared_kwargs = dict(
-            num_workers=int(self.hparams.num_workers),
-            pin_memory=self.hparams.pin_memory,
-        )
-        return shared_kwargs
-
-    def _shared_eval_dataloader_kwargs(self) -> dict:
-        return dict(
-            **self._shared_dataloader_kwargs(),
-            batch_size=self.hparams.eval_batch_size,
-            shuffle=False,
-        )
-
-    def train_dataloader(self):
-        return DataLoader(
-            dataset=self._data_train,
-            batch_size=self.hparams.batch_size,
-            shuffle=True,
-            **self._shared_dataloader_kwargs(),
-        )
-
-    def val_dataloader(self):
-        return (
-            DataLoader(dataset=self._data_val, **self._shared_eval_dataloader_kwargs())
-            if self._data_val is not None
-            else None
-        )
-
-    def test_dataloader(self) -> List[DataLoader]:
-        return [
-            DataLoader(dataset=self._data_test, **self._shared_eval_dataloader_kwargs())
-            for _ in self.test_set_names
-        ]
-
-    def predict_dataloader(self) -> EVAL_DATALOADERS:
-        return [
-            DataLoader(dataset=self._data_val, **self._shared_eval_dataloader_kwargs())
-            if self._data_val is not None
-            else None
-        ]
 
 
 if __name__ == "__main__":

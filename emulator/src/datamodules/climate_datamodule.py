@@ -6,6 +6,7 @@ from pytorch_lightning.utilities.types import EVAL_DATALOADERS
 from torch.utils.data import DataLoader
 
 from emulator.src.data.climate_dataset import ClimateDataset
+from emulator.src.datamodules.template_datamodule import TemplateDataModule
 import torch
 from emulator.src.data.constants import (
     TEMP_RES,
@@ -20,7 +21,7 @@ from emulator.src.utils.utils import get_logger, random_split
 log = get_logger()
 
 
-class ClimateDataModule(LightningDataModule):
+class ClimateDataModule(TemplateDataModule):
     """
     ----------------------------------------------------------------------------------------------------------
     A DataModule implements 5 key methods:
@@ -39,34 +40,34 @@ class ClimateDataModule(LightningDataModule):
 
     def __init__(
         self,
-        in_var_ids: Union[List[str], str] = ["BC_sum", "CO2_sum", "CH4_sum", "SO2_sum"],
-        out_var_ids: Union[List[str], str] = ["pr", "tas"],
-        train_years: Union[int, str] = "2000-2090",
-        train_historical_years: Union[int, str] = "1850-1900",
-        test_years: Union[
-            int, str
-        ] = "2090-2100",  # do we want to implement keeping only certain years for testing?
-        val_split: float = 0.1,  # fraction of testing to split for valdation
-        seq_to_seq: bool = True,  # if true maps from T->T else from T->1
-        channels_last: bool = False,  # wheather variables come last our after sequence lenght
-        train_scenarios: List[str] = ["historical", "ssp126"],
-        test_scenarios: List[str] = ["ssp370", "ssp126"],
-        train_models: List[str] = ["NorESM2-LM"],
-        test_models: Union[List[str], None] = None,
-        batch_size: int = 16,
-        eval_batch_size: int = 64,
-        num_workers: int = 0,
-        pin_memory: bool = False,
-        load_train_into_mem: bool = True,
-        load_test_into_mem: bool = True,
-        verbose: bool = True,
-        seed: int = 11,
-        seq_len: int = SEQ_LEN_MAPPING[TEMP_RES],
-        output_save_dir: Optional[str] = DATA_DIR,
-        num_ensembles: int = 1,  # 1 for first ensemble, -1 for all
-        lon: int = LON,
-        lat: int = LAT,
-        num_levels: int = NUM_LEVELS,
+        #in_var_ids: Union[List[str], str] = ["BC_sum", "CO2_sum", "CH4_sum", "SO2_sum"],
+        #out_var_ids: Union[List[str], str] = ["pr", "tas"],
+        #train_years: Union[int, str] = "2000-2090",
+        #train_historical_years: Union[int, str] = "1850-1900",
+        #test_years: Union[
+        #    int, str
+        #] = "2090-2100",  # do we want to implement keeping only certain years for testing?
+        #val_split: float = 0.1,  # fraction of testing to split for valdation
+        #seq_to_seq: bool = True,  # if true maps from T->T else from T->1
+        #channels_last: bool = False,  # wheather variables come last our after sequence lenght
+        #train_scenarios: List[str] = ["historical", "ssp126"],
+        #test_scenarios: List[str] = ["ssp370", "ssp126"],
+        #train_models: List[str] = ["NorESM2-LM"],
+        #test_models: Union[List[str], None] = None,
+        #batch_size: int = 16,
+        #eval_batch_size: int = 64,
+        #num_workers: int = 0,
+        #pin_memory: bool = False,
+        #load_train_into_mem: bool = True,
+        #load_test_into_mem: bool = True,
+        #verbose: bool = True,
+        #seed: int = 11,
+        #seq_len: int = SEQ_LEN_MAPPING[TEMP_RES],
+        #output_save_dir: Optional[str] = DATA_DIR,
+        #num_ensembles: int = 1,  # 1 for first ensemble, -1 for all
+        #lon: int = LON,
+        #lat: int = LAT,
+        #num_levels: int = NUM_LEVELS,
         name: str = "climate",
         # input_transform: Optional[AbstractTransform] = None,
         # normalizer: Optional[Normalizer] = None,
@@ -81,15 +82,17 @@ class ClimateDataModule(LightningDataModule):
         """
         super().__init__()
 
-        if test_models is None:
-            self.test_models = train_models
-        else:
-            self.test_models = test_models
-
+      
         # The following makes all args available as, e.g., self.hparams.batch_size
         self.save_hyperparameters(ignore=["input_transform", "normalizer"])
         # self.input_transform = input_transform  # self.hparams.input_transform
         # self.normalizer = normalizer
+
+        if self.hparams.test_models is None:
+            self.test_models = self.hparams.train_models
+        else:
+            self.test_models = self.hparams.test_models
+
 
         self._data_train: Optional[ClimateDataset] = None
         self._data_val: Optional[ClimateDataset] = None
@@ -97,7 +100,7 @@ class ClimateDataModule(LightningDataModule):
         self._data_predict: Optional[List[ClimateDataset]] = None
         self.test_set_names: Optional[List[str]] = [
             f"{scenario}_{model}"
-            for scenario in test_scenarios
+            for scenario in self.hparams.test_scenarios
             for model in self.test_models
         ]
 
@@ -109,10 +112,6 @@ class ClimateDataModule(LightningDataModule):
         self._data_predict = None
         self.log_text = get_logger()
 
-    def prepare_data(self):
-        """Download data if needed. This method is called only from a single GPU.
-        Do not use it to assign state (self.x = y)."""
-        pass
 
     def setup(self, stage: Optional[str] = None):
         """Load data. Set internal variables: self._data_train, self._data_val, self._data_test."""
@@ -176,6 +175,9 @@ class ClimateDataModule(LightningDataModule):
         if stage == "predict":
             print("Prediction Set not yet implemented. Using Test Set.")
             self._data_predict = self._data_test
+    
+    
+    """
 
     def on_before_batch_transfer(self, batch, dataloader_idx):
         return batch
@@ -215,11 +217,7 @@ class ClimateDataModule(LightningDataModule):
             else None
         )
 
-    def test_dataloader(self) -> List[DataLoader]:
-        return [
-            DataLoader(dataset=ds_test, **self._shared_eval_dataloader_kwargs())
-            for ds_test in self._data_test
-        ]
+    
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
         return [
@@ -227,6 +225,7 @@ class ClimateDataModule(LightningDataModule):
             if self._data_val is not None
             else None
         ]
+    """
 
 
 if __name__ == "__main__":

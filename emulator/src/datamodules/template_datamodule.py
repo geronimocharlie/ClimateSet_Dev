@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, List, Callable
+from typing import Optional, List, Callable, Union
 
 from pytorch_lightning import LightningDataModule
 from pytorch_lightning.utilities.types import EVAL_DATALOADERS
@@ -9,11 +9,19 @@ from torch.utils.data import DataLoader
 import torch
 
 from emulator.src.utils.utils import get_logger, random_split
+from emulator.src.data.constants import (
+    TEMP_RES,
+    SEQ_LEN_MAPPING,
+    LAT,
+    LON,
+    NUM_LEVELS,
+    DATA_DIR,
+)
 
 log = get_logger()
 
 
-class DummyDataModule(LightningDataModule):
+class TemplateDataModule(LightningDataModule):
     """
     ----------------------------------------------------------------------------------------------------------
     A DataModule implements 5 key methods:
@@ -32,24 +40,25 @@ class DummyDataModule(LightningDataModule):
 
     def __init__(
         self,
-        in_var_ids: List[str] = ["BC", "CO2", "CH4", "SO2"],
-        out_var_ids: List[str] = ["pr", "tas"],
-        train_years: List[str] = ["2020", "2030", "2040"],
-        test_years: List[str] = [
-            "2040"
-        ],  # do we want to implement keeping only certain years for testing?
-        seq_len: int = 10,
+        in_var_ids: str = ["BC_sum", "CO2_sum", "CH4_sum", "SO2_sum"],
+        out_var_ids: str = ["pr", "tas"],
+        train_years: str = "2020-2040",
+        train_historical_years: Union[int, str] = "1850-1900",
+        test_years: str =
+            "2040",  # do we want to implement keeping only certain years for testing?
+        seq_len: int = SEQ_LEN_MAPPING[TEMP_RES],
         seq_to_seq: bool = True,  # if true maps from T->T else from T->1
-        lon: int = 32,
-        lat: int = 32,
-        num_levels: int = 1,
+        lon: int = LON,
+        lat: int = LAT,
+        val_split: float = 0.1,
+        num_levels: int = NUM_LEVELS,
         channels_last: bool = True,  # wheather variables come last our after sequence lenght
-        train_scenarios: List[str] = ["historical", "ssp126"],
-        test_scenarios: List[str] = ["ssp345"],
-        val_scenarios: List[str] = ["ssp119"],
-        train_models: List[str] = ["NorESM5"],
-        val_models: List[str] = ["NorESM5"],
-        test_models: List[str] = ["CanESM5"],
+        train_scenarios: List[str] = ["ssp126"],
+        test_scenarios: List[str] = ["ssp370"],
+        val_scenarios: List[str] = ["ssp126"],
+        train_models: List[str] = ["NorESM2-LM"],
+        val_models: List[str] = ["NorESM2-LM"],
+        test_models: List[str] = ["EC-Earth3"],
         batch_size: int = 16,
         eval_batch_size: int = 64,
         num_workers: int = 0,
@@ -59,6 +68,9 @@ class DummyDataModule(LightningDataModule):
         load_valid_into_mem: bool = True,
         verbose: bool = True,
         seed: int = 11,
+        output_save_dir: Optional[str] = DATA_DIR,
+        data_dir: Optional[str] = DATA_DIR,
+        num_ensembles: int = 1,  # 1 for first ensemble, -1 for all
         # input_transform: Optional[AbstractTransform] = None,
         # normalizer: Optional[Normalizer] = None,
     ):
@@ -157,10 +169,18 @@ class DummyDataModule(LightningDataModule):
             else None
         )
 
+    """
     def test_dataloader(self) -> List[DataLoader]:
         return [
             DataLoader(dataset=self._data_test, **self._shared_eval_dataloader_kwargs())
             for _ in self.test_set_names
+        ]
+    """
+    
+    def test_dataloader(self) -> List[DataLoader]:
+        return [
+            DataLoader(dataset=ds_test, **self._shared_eval_dataloader_kwargs())
+            for ds_test in self._data_test
         ]
 
     def predict_dataloader(self) -> EVAL_DATALOADERS:
@@ -170,5 +190,6 @@ class DummyDataModule(LightningDataModule):
             else None
         ]
 
-    dm = DummyDataModule()
+if __name__=="__main__":
+    dm = TemplateDataModule()
     dm.setup("fit")

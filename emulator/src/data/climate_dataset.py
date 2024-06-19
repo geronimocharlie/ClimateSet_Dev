@@ -26,7 +26,7 @@ from emulator.src.data.constants import (
     NO_OPENBURNING_VARS,
     AVAILABLE_MODELS_FIRETYPE,
 )
-
+from emulator.src.data.preprocessing import resolve_preprocessing
 log = get_logger()
 
 """
@@ -63,6 +63,7 @@ class ClimateDataset(torch.utils.data.Dataset):
         input_normalization="z-norm",  # TODO: implement
         output_transform=None,
         output_normalization="z-norm",
+        preprocessing_mapping={'CO2_sum': ('accum_time',-1), 'CH4_sum_time': ('accum',3)},
         *args,
         **kwargs,
     ):
@@ -128,6 +129,7 @@ class ClimateDataset(torch.utils.data.Dataset):
             output_save_dir=output_save_dir,
             seq_to_seq=seq_to_seq,
             seq_len=seq_len,
+            preprocessing_mapping=preprocessing_mapping,
         )
         # creates on cmip and on input4mip dataset
         print("Creating input4mips...")
@@ -193,6 +195,7 @@ class ClimateDataset(torch.utils.data.Dataset):
             temp_data = temp_data.transpose((1, 2, 3, 4, 0))
         else:
             temp_data = temp_data.transpose((1, 2, 0, 3, 4))
+
         return temp_data  # (years*num_scenarios, seq_len, vars, lon, lat)
 
     def save_data_into_disk(
@@ -533,6 +536,8 @@ class CMIP6Dataset(ClimateDataset):
                 seq_len=seq_len,
             )
 
+            # MAPPING FOR PREPROCESSING GOES HERE
+
             if self.mode == "train" or self.mode == "train+val":
                 stats_fname = self.get_save_name_from_kwargs(
                     mode=mode, file="statistics", kwargs=fname_kwargs
@@ -596,6 +601,7 @@ class Input4MipsDataset(ClimateDataset):
         output_save_dir: str = "",
         seq_to_seq: bool = True,
         seq_len: int = 12,
+        preprocessing_mapping: Uninon[None, Dict] = None,
         *args,
         **kwargs,
     ):
@@ -606,8 +612,8 @@ class Input4MipsDataset(ClimateDataset):
         self.output_save_dir = output_save_dir
         self.input_nc_files = []
         self.output_nc_files = []
-
         self.scenarios = scenarios
+        self.preprocessing_mapping=preprocessing_mapping
         fname_kwargs = dict(
             years=f"{years[0]}-{years[-1]}",
             historical_years=f"{historical_years[0]}-{historical_years[-1]}",
@@ -617,6 +623,7 @@ class Input4MipsDataset(ClimateDataset):
             openburning_specs=openburning_specs,
             seq_to_seq=seq_to_seq,
             seq_len=seq_len,
+            preprocessing_mapping=str(preprocessing_mapping)
         )
 
         historical_openburning, ssp_openburning = openburning_specs
@@ -698,6 +705,13 @@ class Input4MipsDataset(ClimateDataset):
                 seq_len=seq_len,
             )  # we always want the full sequence for input4mips
 
+            # PREPROCESSING GOES HERE!
+            # from mapping we need to get the right index now and then apply the function
+            # raw_data is # (years*num_scenarios, seq_len, vars, lon, lat)
+            for i,v in enumerate(variables):
+                if v in self.preprocessing_mapping.keys():
+                    self.raw_data[:,:,i,:,:]=resolve_preprocessing(data=self.raw_data[:,:,i:i+1,:,:], mapping=self.preprocessing_mapping[v])# data for the variable, one-element slicing for keeping dimension
+
             if self.mode == "train" or self.mode == "train+val":
                 stats_fname = self.get_save_name_from_kwargs(
                     mode=mode, file="statistics", kwargs=fname_kwargs
@@ -750,6 +764,7 @@ if __name__ == "__main__":
         seq_len=12,
         num_ensembles=2,
         channels_last=False,
+        preprocessing_mapping={'CO2_sum': ('accum_time',-1), 'CH4_sum_time': ('accum',3)}
     )
     # for (i,j) in ds:
     # print("i:", i.shape)
