@@ -5,6 +5,7 @@ import numpy as np
 import time
 
 from typing import Optional, List, Any, Dict, Tuple, Union
+from torch import Tensor
 
 from omegaconf import DictConfig
 import omegaconf
@@ -137,6 +138,7 @@ class BaseModel(LightningModule):
 
         #  Loop over output variable to compute loss seperateley!!!
         for out_var in self._out_var_ids:
+            print("target shape", Y[out_var].size())
             loss_per_var = self.criterion(preds[out_var], Y[out_var])
             if torch.isnan(loss_per_var).sum() > 0:
                 exit(0)
@@ -146,7 +148,10 @@ class BaseModel(LightningModule):
 
         # Average Loss over vars
         loss = loss / len(self._out_var_ids)
-
+        # Adding additional loss terms
+        loss, loss_components_dict = self.add_additional_losses(loss)
+        self.perform_weight_regularization()
+        
         n_zero_gradients = (
             sum(
                 [
@@ -159,7 +164,7 @@ class BaseModel(LightningModule):
         )
 
         self.log_dict(
-            {**train_log, "train/loss": loss, "n_zero_gradients": n_zero_gradients}
+            {**train_log, "train/loss": loss, "n_zero_gradients": n_zero_gradients, **loss_components_dict}
         )
 
         ret = {
@@ -170,6 +175,19 @@ class BaseModel(LightningModule):
         }
 
         return ret
+    
+    def add_additional_losses(self, loss_in: Tensor):
+        # taking original loss and compute customized penalty terms
+        # can be overwirtten by models
+        # returns new loss plus dict to logg
+        loss_dict = {}
+
+        return loss_in, loss_dict
+
+    def perform_weight_regularization(self):
+        # performing any kind of weight regularizatio
+        # can be overwritten by models
+        pass
 
     def on_train_epoch_end(self):
         train_time = time.time() - self._start_epoch_time

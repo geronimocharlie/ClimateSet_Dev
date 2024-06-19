@@ -1,0 +1,22 @@
+defaults:
+  #- /input_transform: 
+  - /optimizer: adam.yaml
+
+_target_: emulator.src.core.models.causalpaca.Causalpaca
+
+lon: ${datamodule.lon}
+lat: ${datamodule.lat}
+in_var_ids: ${datamodule.in_var_ids}
+out_var_ids: ${datamodule.out_var_ids}
+seq_len: ${datamodule.seq_len}
+channels_last: ${datamodule.channels_last}
+tau: 4
+sparsity_coff: 0.4
+latent_size: 10
+base_model_config:
+  name: "climax"
+
+scheduler:
+  _target_: torch.optim.lr_scheduler.ExponentialLR
+  gamma: 0.98
+          
